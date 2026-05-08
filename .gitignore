@@ -1,0 +1,43 @@
+# 데이터셋 (원본 + 추출본) — GitHub 용량 한계 초과
+*.tar.gz
+*.tar
+**/data/
+Anti_UAV_Localization/data/
+
+# 논문 PDF (저작권)
+*.pdf
+
+# 학습 산출물 — 필요하면 Git LFS / Release page로 별도 관리
+**/checkpoints/
+Anti_UAV_Localization/checkpoints/
+
+# 학습/평가 로그 (tqdm carriage return으로 비대)
+*.log
+
+# 메모리 디렉토리
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 운영체제
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Jupyter
+.ipynb_checkpoints/
