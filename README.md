@@ -8,7 +8,7 @@ UROP 과제로 진행. RGB/IR 이미지에서 UAV를 픽셀 단위로 탐지하�
 
 ## 핵심 결과
 
-전체 학습 데이터의 **5%(stride=20)** 와 **10%(stride=10)** 만으로 논문 ThinDyUNet 메트릭을 모두 능가.
+전체 학습 데이터의 **5%(stride=20)** 와 **10%(stride=10)** 만으로 논문 ThinDyUNet 메트릭 재구현.
 
 | Metric | Paper ThinDyUNet | Ours (stride=20, 5%) | **Ours (stride=10, 10%)** |
 |---|---|---|---|
