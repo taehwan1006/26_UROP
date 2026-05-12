@@ -33,9 +33,10 @@ def evaluate(
     loader: DataLoader,
     device: torch.device,
     split_name: str = "test",
+    threshold: float = 0.5,
 ) -> dict:
     model.eval()
-    metrics = SegmentationMetrics(threshold=0.5)
+    metrics = SegmentationMetrics(threshold=threshold)
 
     # 추론 시간 측정
     total_time = 0.0
@@ -112,6 +113,10 @@ def main():
     parser.add_argument(
         "--n_vis", type=int, default=20, help="Number of samples to visualize",
     )
+    parser.add_argument(
+        "--threshold", type=float, default=0.5,
+        help="Sigmoid binarization threshold. Paper uses 0.9, default is 0.5.",
+    )
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -156,10 +161,10 @@ def main():
     print(f"Loaded checkpoint: {ckpt_path} (epoch {ckpt['epoch']})")
 
     # Evaluate
-    results = evaluate(model, loader, device, split_name=args.split)
+    results = evaluate(model, loader, device, split_name=args.split, threshold=args.threshold)
 
     print(f"\n{'='*60}")
-    print(f"  {args.split.upper()} SET RESULTS")
+    print(f"  {args.split.upper()} SET RESULTS (threshold={args.threshold})")
     print(f"{'='*60}")
     print(f"  Precision:               {results['precision']:.4f}")
     print(f"  Recall:                  {results['recall']:.4f}")
