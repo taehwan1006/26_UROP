@@ -11,9 +11,9 @@ data:
   images_root: "data/raw/images"
   masks_root: "data/raw/masks"
   img_size: [512, 512]
-  num_workers: 8            # A5000 NAS 환경
-  train_stride: 1           # 전체 train 프레임 (~304K)
-  val_stride: 20            # val은 5%로 빠르게 (~6K, 이전 실험과 동일 set)
+  num_workers: 12           # A5000 서버 환경 (CPU 코어 비례)
+  train_stride: 1           # 전체 train 프레임 (~605K)
+  val_stride: 20            # val은 5%로 빠르게 (~6K)
 
 # Model
 model:
@@ -25,21 +25,21 @@ model:
 
 # Training
 training:
-  # Batch (A5000 24GB 가정 — OOM이면 batch=4, accum=6 로 조정)
-  batch_size: 8
-  accumulation_steps: 3     # 8 × 3 = 24 (논문 effective batch)
+  # Batch (A5000 24GB 최적화)
+  batch_size: 12            # 4 -> 12 (VRAM 24GB 활용)
+  accumulation_steps: 2     # 12 x 2 = 24 (논문 effective batch 유지)
 
   # Optimization
   max_epochs: 50
   learning_rate: 0.0001
   weight_decay: 0.0001
-  early_stopping_patience: 12   # 풀 데이터는 plateau 후에도 회복 여지
+  early_stopping_patience: 15   # 풀 데이터는 학습 곡선이 완만하므로 인내심 상향
 
   # LR Scheduler (논문: ReduceLROnPlateau)
   scheduler:
     factor: 0.15
-    patience: 5             # full data 1 epoch이 길어서 patience 작게
-    cooldown: 3
+    patience: 4             # 1 epoch(60만장)이 매우 길므로 4번 실패시 바로 감쇄
+    cooldown: 2
     min_lr: 0.0000001
 
   # Loss
@@ -49,7 +49,7 @@ training:
     dice_weight: 0.5
 
   # AMP (A5000 tensor core 있지만 N-fold 패턴상 효과 불확실)
-  amp_enabled: false
+  amp_enabled: True
 
   # I/O
   save_dir: "checkpoints/full"

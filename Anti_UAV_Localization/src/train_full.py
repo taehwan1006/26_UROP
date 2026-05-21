@@ -236,6 +236,7 @@ def main():
         base_ch=model_cfg["base_ch"],
         n_kernels=model_cfg["n_kernels"],
     ).to(device)
+    
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {total_params:,} ({total_params / 1e6:.2f}M)")
 
