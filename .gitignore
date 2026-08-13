@@ -3,6 +3,8 @@
 *.tar
 **/data/
 Anti_UAV_Localization/data/
+**/data/
+DUT-Anti-UAV/
 
 # 논문 PDF (저작권)
 *.pdf
@@ -41,3 +43,8 @@ desktop.ini
 
 # Jupyter
 .ipynb_checkpoints/
+
+# SAM 2 모델 가중치
+sam2.1_hiera_large.pt
+sam2.1_hiera_l.pt
+sam2/
