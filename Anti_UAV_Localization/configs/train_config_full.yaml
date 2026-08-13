@@ -11,8 +11,8 @@ data:
   images_root: "data/raw/images"
   masks_root: "data/raw/masks"
   img_size: [512, 512]
-  num_workers: 12           # A5000 서버 환경 (CPU 코어 비례)
-  train_stride: 1           # 전체 train 프레임 (~605K)
+  num_workers: 4           # A5000 서버 환경 (CPU 코어 비례)
+  train_stride: 10           # 전체 train 프레임 (~605K)
   val_stride: 20            # val은 5%로 빠르게 (~6K)
 
 # Model
@@ -26,8 +26,8 @@ model:
 # Training
 training:
   # Batch (A5000 24GB 최적화)
-  batch_size: 12            # 4 -> 12 (VRAM 24GB 활용)
-  accumulation_steps: 2     # 12 x 2 = 24 (논문 effective batch 유지)
+  batch_size: 8           
+  accumulation_steps: 3     # 8 x 3 = 24 (논문 effective batch 유지)
 
   # Optimization
   max_epochs: 50
