@@ -106,6 +106,7 @@ class UAVSegmentationDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         img_path = self.image_paths[idx]
+        rel_path = img_path.relative_to(self.images_dir)
         mask_path = self._img_to_mask_path(img_path)
 
         # 이미지 로딩

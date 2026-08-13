@@ -104,7 +104,7 @@ def main():
         help="Path to model checkpoint",
     )
     parser.add_argument(
-        "--split", type=str, default="test", choices=["val", "test"],
+        "--split", type=str, default="test",
         help="Dataset split to evaluate",
     )
     parser.add_argument(
