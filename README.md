@@ -68,3 +68,153 @@ UROP 과제로 진행. RGB/IR 이미지에서 UAV를 픽셀 단위로 탐지하�
 
 ```bash
 pip install -r Anti_UAV_Localization/requirements.txt
+
+```
+
+---
+
+## 데이터셋 및 SAM 2.1 마스크 변환 파이프라인
+
+논문 저자 공개 데이터셋 및 DUT-Anti-UAV 전체 시퀀스(나무/전선 등 장애물 환경) 처리:
+
+* `UAVSemanticSegmentationInput.tar.gz` — 이미지 (RGB + IR), 605,045장
+* `UAVSemanticSegmentationLabels.tar.gz` — 바이너리 마스크
+* **DUT-Anti-UAV 시퀀스 데이터 (`Anti-UAV-Tracking-V0` 및 `_gt.txt`)**
+
+압축 해제 및 마스크 생성:
+
+```bash
+python Anti_UAV_Localization/scripts/extract_data.py
+
+```
+
+### 💡 DUT-Anti-UAV 마스크 변환 스크립트 (`maskconv.py`) 특징
+
+* **계층 구조 유지:** `video01`, `video02` 등 하위 시퀀스 폴더 구조를 `data/raw/masks/test_dut/` 아래에 그대로 보존.
+* **$-100$ 드론 부재 프레임 예외 처리:** `_gt.txt` 내에 `-100 -100 -100 -100`으로 기록된 프레임(드론이 화면 밖으로 나갔거나 가려져 추적 불가능한 구간)은 SAM 2.1 추론을 생략하고 깨끗한 빈 검은색 마스크(`0`)로 자동 저장하여 데이터 오염 방지.
+* **표준 접미사 적용:** `0001_mask.png` 형태로 저장하여 `uav_dataset.py`와 완벽 1:1 매칭.
+
+---
+
+## 모델: ThinDyUNet (1.37M params)
+
+논문 Section 4 / Figure 6 기반 구현.
+
+* **U-Net 기반** encoder-decoder
+* **고정 64채널** (모든 layer)
+* **Dynamic Convolution** (encoder)
+* N개 커널 후보 + SE-style attention으로 입력 의존적 가중합
+* `K_dyn = Σ αᵢ·Kᵢ`, `Y = LeakyReLU(GroupNorm(K_dyn * X))`
+* **N-fold 효율 구현**
+* `conv(x, Σαᵢ·Kᵢ) = Σαᵢ·conv(x, Kᵢ)` 항등식 활용
+* 단일 conv (output channels = N×out_ch) 후 attention 가중합
+* cuDNN이 잘 최적화하는 일반 conv 한 번으로 처리
+
+```python
+out = F.conv2d(x, weight, padding=padding)         # (B, N*C_out, H, W)
+out = out.view(B, N, C_out, H, W)
+out = (alpha.view(B, N, 1, 1, 1) * out).sum(dim=1) # (B, C_out, H, W)
+
+```
+
+---
+
+## 학습 (V2 파이프라인)
+
+논문 Section 5.2 설정을 기반으로 하되, **안정성과 속도를 극대화한 V2 세팅** 적용 (서버 기준):
+
+| 항목 | 값 | 비고 |
+| --- | --- | --- |
+| Input size | 512×512 |  |
+| Optimizer | **AdamW** | (개선) weight_decay=1e-4 |
+| Learning rate | 1e-4 |  |
+| Scheduler | **ReduceLROnPlateau** | (개선) factor=0.15, patience=4 |
+| Batch Size | 8 | (개선) A5000 24GB 활용 |
+| Gradient accumulation | 3 | effective batch **24** 유지 |
+| Loss | **BCEDiceLoss** | (개선) 작은 드론 객체 탐지율 대폭 상향 |
+| AMP (FP16) | **True** | (개선) 학습 속도 30% 향상 |
+
+```bash
+# V2 파이프라인 (추천)
+python Anti_UAV_Localization/src/train_full.py \
+    --config Anti_UAV_Localization/configs/train_config_full.yaml
+
+```
+
+**학습 시간 비교:**
+
+* V1 (RTX 4070S, stride=10, FP32): ~1,900 s/epoch
+* **V2 (RTX A5000, stride=10, AMP FP16): ~1,240 s/epoch (약 35% 가속)**
+
+---
+
+## 평가 및 실전 데이터셋 연동
+
+```bash
+# 표준 평가 (threshold=0.5)
+python Anti_UAV_Localization/src/evaluate.py \
+    --config Anti_UAV_Localization/configs/train_config_full.yaml \
+    --checkpoint Anti_UAV_Localization/checkpoints/full/best_model.pth \
+    --split test
+
+# 전체 DUT-Anti-UAV 테스트셋 평가 (비디오 계층 구조 및 시각화 지원)
+python Anti_UAV_Localization/src/evaluate.py \
+    --config Anti_UAV_Localization/configs/train_config_full.yaml \
+    --checkpoint Anti_UAV_Localization/checkpoints/last_model.pth \
+    --split test_dut --visualize --n_vis 50
+
+```
+
+---
+
+## 실험 노트 (트러블슈팅 및 개선 사항)
+
+| 시도 | 결과 및 원인 |
+| --- | --- |
+| **$-100$ 좌표 마스크 예외 처리** | **데이터 정제 및 Recall 정상화** — 초기 전체 데이터셋 평가 시 Recall이 0에 수렴했던 원인이 $-100$ 값을 SAM 2가 받아 생성이 왜곡되었기 때문임을 규명. 빈 마스크 예외 처리를 도입하여 전체 24,804장 데이터셋의 정량 평가 수치(Recall 21.1%)를 정상 복구함. |
+| **재귀적 데이터셋 로더 (`rglob`)** | **하위 폴더 계층 구조 지원** — `uav_dataset.py`에 `rglob("*")` 및 시퀀스 폴더 순회 로직을 적용하여 `test_dut/video01/` 형태의 복잡한 디렉토리 구조를 코드 수정 없이 완벽하게 연동. |
+| **AMP fp16 적용** | **성능 폭발 (RTX A5000)** — 기존 4070S(V1)에서는 효과가 미미했으나, A5000에서 AMP 적용 시 VRAM 절약은 물론 에포크당 소요 시간이 1,900초에서 1,240초로 약 **35% 가속**됨. |
+| **Loss 함수 변경** | **Recall 수직 상승** — 순수 BCE Loss에서 `BCEDiceLoss`로 변경 후, 클래스 불균형(배경 99%) 문제가 해결되며 정밀도(P)와 재현율(R)이 모두 94% 후반대로 수렴. |
+
+---
+
+## 프로젝트 구조
+
+```
+Anti_UAV_Localization/
+├── configs/
+│   ├── train_config.yaml               # stride=20 (5%)
+│   ├── train_config_stride10.yaml      # stride=10 (10%) V1
+│   └── train_config_full.yaml          # stride=10 (10%) V2 파이프라인 메인
+├── scripts/
+│   ├── extract_data.py                 # tar.gz → data/raw/
+│   ├── maskconv.py                     # SAM 2.1 기반 전체 DUT-Anti-UAV 마스크 변환 (-100 예외처리 포함)
+│   ├── benchmark_batch.py              # batch size별 속도/메모리 측정
+│   └── visualize_compare.py            # 두 모델 비교 시각화
+├── src/
+│   ├── dataset/uav_dataset.py          # rglob 기반 계층형 시퀀스 stride 샘플링
+│   ├── models/
+│   │   ├── thin_dy_unet.py             # ThinDyUNet (1.37M)
+│   │   └── thin_unet.py                # ablation: regular conv (14.78M)
+│   ├── utils/
+│   │   ├── metrics.py                  # IoU 다중 정의
+│   │   └── visualization.py
+│   ├── train_full.py                   # V2: AMP + AdamW + BCEDice + 스케줄러 메인 학습 스크립트
+│   └── evaluate.py                     # 테스트셋 및 DUT-Anti-UAV 평가/시각화
+├── results/                            # 시각화 PNG
+├── data/                               # gitignore (raw/)
+└── checkpoints/                        # gitignore
+
+```
+
+---
+
+## References
+
+* Kim, S.; Jang, K. *A Semantic Segmentation Dataset and Real-Time Localization Model for Anti-UAV Applications.* Applied Sciences 2025, 15, 7183.
+* Wang, L. et al. *Temporal Segment Networks for Action Recognition in Videos.* ECCV 2016 — sequence-aware sparse sampling 관련.
+* Chen, Y. et al. *Dynamic Convolution: Attention over Convolution Kernels.* CVPR 2020 — dynamic convolution 원조.
+
+```
+
+```
