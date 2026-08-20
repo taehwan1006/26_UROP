@@ -1,0 +1,57 @@
+# ThinDyUNet Full-Data Training Configuration
+# 논문 베이스 + 우리 검증된 개선 통합 (train_full.py 전용)
+#
+# 적용된 논문 설정:
+#   AdamW, DiceLoss (또는 BCE+Dice combo), ReduceLROnPlateau, stride=1
+# 유지된 우리 개선:
+#   ImageNet Normalize, shuffle=True, N-fold 효율 conv, N=3
+
+# Data
+data:
+  images_root: "data/raw/images"
+  masks_root: "data/raw/masks"
+  img_size: [512, 512]
+  num_workers: 4           # A5000 서버 환경 (CPU 코어 비례)
+  train_stride: 1           # 전체 train 프레임 (~605K)
+  val_stride: 2            # val은 5%로 빠르게 (~6K)
+
+# Model
+model:
+  name: "ThinDyUNet"
+  in_channels: 3
+  n_classes: 1
+  base_ch: 64
+  n_kernels: 3
+
+# Training
+training:
+  # Batch (A5000 24GB 최적화)
+  batch_size: 8           
+  accumulation_steps: 3     # 8 x 3 = 24 (논문 effective batch 유지)
+
+  # Optimization
+  max_epochs: 20
+  learning_rate: 0.00001
+  weight_decay: 0.0001
+  early_stopping_patience: 5   # 풀 데이터는 학습 곡선이 완만하므로 인내심 상향
+
+  # LR Scheduler (논문: ReduceLROnPlateau)
+  scheduler:
+    factor: 0.5
+    patience: 2             # 1 epoch(60만장)이 매우 길므로 4번 실패시 바로 감쇄
+    cooldown: 1
+    min_lr: 0.0000001
+
+  # Loss
+  loss:
+    name: "bce_dice"        # "bce", "dice", "bce_dice" 중 하나
+    bce_weight: 0.5
+    dice_weight: 0.5
+
+  # AMP (A5000 tensor core 있지만 N-fold 패턴상 효과 불확실)
+  amp_enabled: True
+
+  # I/O
+  save_dir: "checkpoints/full"
+  log_interval: 500          # full data는 iteration이 많아서 띄엄띄엄
+  ckpt_every_epochs: 5       # 매 5 epoch마다 epoch_NN.pth 저장 (롤백용)
