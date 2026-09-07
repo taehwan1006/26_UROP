@@ -6,8 +6,13 @@ Anti_UAV_Localization/data/
 **/data/
 DUT-Anti-UAV/
 
-# 논문 PDF (저작권)
+# 논문 PDF 및 원고 (저작권 / 학회 제출본)
+# 원고는 바이너리라 diff가 안 되고 리비전마다 통째로 쌓임. 버전관리가 필요하면
+# 별도 private 저장소나 클라우드에서 관리한다.
 *.pdf
+*.docx
+*.hwp
+*.hwpx
 
 # 학습 산출물 — 필요하면 Git LFS / Release page로 별도 관리
 **/checkpoints/
