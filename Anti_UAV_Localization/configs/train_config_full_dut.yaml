@@ -7,13 +7,44 @@
 #   ImageNet Normalize, shuffle=True, N-fold 효율 conv, N=3
 
 # Data
+#
+# sources 아래에 split 이름별로 데이터셋 소스를 나열한다.
+# - 소스를 추가하면 ConcatDataset으로 자동 합쳐진다 (스크립트 수정 불필요)
+# - 소스별 옵션: stride / include_sequences / exclude_sequences / max_samples
+#   include/exclude_sequences 는 시퀀스 폴더 glob 패턴 (예: "video0*", "*/visible")
+# - 스크립트에서 --train-split / --val-split / --split 으로 split 이름 선택
 data:
-  images_root: "data/raw/images"
+  images_root: "data/raw/images"   # sources 미정의 split의 폴백 루트
   masks_root: "data/raw/masks"
   img_size: [512, 512]
   num_workers: 4           # A5000 서버 환경 (CPU 코어 비례)
-  train_stride: 1           # 전체 train 프레임 (~605K)
-  val_stride: 2            # val은 5%로 빠르게 (~6K)
+
+  sources:
+    train:
+      - name: dut_tracking
+        images_dir: "data/raw/images/train_dut"
+        masks_dir: "data/raw/masks/train_dut"
+        stride: 1
+      - name: dut_detection
+        images_dir: "data/detection_raw/images/train"
+        masks_dir: "data/detection_raw/masks/train"
+        stride: 1          # Detection 셋은 중복 프레임이 없으므로 항상 1
+
+    val:
+      - name: tracking_val
+        images_dir: "data/raw/images/val"
+        masks_dir: "data/raw/masks/val"
+        stride: 2
+      - name: dut_detection_val
+        images_dir: "data/detection_raw/images/val"
+        masks_dir: "data/detection_raw/masks/val"
+        stride: 1
+
+    test_dut:
+      - name: dut_test
+        images_dir: "data/raw/images/test_dut"
+        masks_dir: "data/raw/masks/test_dut"
+        stride: 1
 
 # Model
 model:

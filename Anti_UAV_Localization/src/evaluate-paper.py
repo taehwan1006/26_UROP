@@ -10,14 +10,15 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-import yaml
 from tqdm import tqdm
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from dataset.uav_dataset import UAVSegmentationDataset
-from models.thin_dy_unet import ThinDyUNet
+from dataset.builder import build_split_dataset
+from models import build_model
+from utils.checkpoint import load_weights
+from utils.config import load_config
 
 # -----------------------------------------------------------------------------
 # 논문 공식 코드의 utils.common 에 있던 메트릭 계산식을 그대로 모사합니다.
@@ -36,15 +37,15 @@ def dice_coeff(pred, mask, smooth=1e-6):
     intersection = (pred * mask).sum()
     return float((2. * intersection + smooth) / (pred.sum() + mask.sum() + smooth))
 
-def load_config(config_path: str) -> dict:
-    with open(config_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
 def main():
     parser = argparse.ArgumentParser(description="Evaluate ThinDyUNet (Paper Version)")
     parser.add_argument("--config", type=str, default="configs/train_config_full.yaml")
     parser.add_argument("--checkpoint", type=str, default="checkpoints/full/best_model.pth")
-    parser.add_argument("--split", type=str, default="test", choices=["val", "test"])
+    parser.add_argument("--split", type=str, default="test")
+    parser.add_argument("--stride", type=int, default=None)
+    parser.add_argument("--include-sequences", type=str, nargs="+", default=None)
+    parser.add_argument("--exclude-sequences", type=str, nargs="+", default=None)
+    parser.add_argument("--max-samples", type=int, default=None)
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -54,16 +55,15 @@ def main():
 
     # Dataset & Loader
     data_cfg = cfg["data"]
-    img_size = tuple(data_cfg["img_size"])
-    eval_stride = data_cfg.get(f"{args.split}_stride", 1)
-
-    dataset = UAVSegmentationDataset(
-        images_dir=str(project_root / data_cfg["images_root"] / args.split),
-        masks_dir=str(project_root / data_cfg["masks_root"] / args.split),
-        img_size=img_size,
-        stride=eval_stride,
+    dataset = build_split_dataset(
+        data_cfg, args.split, project_root,
+        overrides={
+            "stride": args.stride,
+            "include_sequences": args.include_sequences,
+            "exclude_sequences": args.exclude_sequences,
+            "max_samples": args.max_samples,
+        },
     )
-    
     loader = DataLoader(
         dataset,
         batch_size=cfg["training"]["batch_size"],
@@ -71,21 +71,11 @@ def main():
         num_workers=data_cfg["num_workers"],
         pin_memory=True,
     )
-    print(f"{args.split.capitalize()} samples: {len(dataset):,}")
 
     # Model
-    model_cfg = cfg["model"]
-    model = ThinDyUNet(
-        in_channels=model_cfg["in_channels"],
-        n_classes=model_cfg["n_classes"],
-        base_ch=model_cfg["base_ch"],
-        n_kernels=model_cfg["n_kernels"],
-    ).to(device)
-
-    # Load checkpoint
+    model = build_model(cfg["model"]).to(device)
     ckpt_path = project_root / args.checkpoint
-    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
-    model.load_state_dict(ckpt["model_state_dict"])
+    load_weights(model, ckpt_path, device)
     print(f"Test model: {ckpt_path}")
     model.eval()
 

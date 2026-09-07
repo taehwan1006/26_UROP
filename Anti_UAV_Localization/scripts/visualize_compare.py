@@ -11,35 +11,20 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-import yaml
+import torch.nn as nn
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from dataset.uav_dataset import UAVSegmentationDataset
-from models.thin_dy_unet import ThinDyUNet
+from dataset.builder import build_split_dataset
+from models import build_model
+from utils.checkpoint import load_weights
+from utils.config import load_config
+from utils.image import denorm
 
 
-def load_config(path: str) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-def denorm(image: torch.Tensor) -> np.ndarray:
-    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-    std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-    image = (image.cpu().float() * std + mean).clamp(0, 1)
-    return image.permute(1, 2, 0).numpy()
-
-
-def load_model(ckpt_path: Path, device, model_cfg) -> ThinDyUNet:
-    model = ThinDyUNet(
-        in_channels=model_cfg["in_channels"],
-        n_classes=model_cfg["n_classes"],
-        base_ch=model_cfg["base_ch"],
-        n_kernels=model_cfg["n_kernels"],
-    ).to(device)
-    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
-    model.load_state_dict(ckpt["model_state_dict"])
+def load_model(ckpt_path: Path, device, model_cfg) -> nn.Module:
+    model = build_model(model_cfg).to(device)
+    load_weights(model, ckpt_path, device)
     model.eval()
     return model
 
@@ -76,6 +61,9 @@ def main():
     parser.add_argument("--eval_stride", type=int, default=200)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--split", default="test")
+    parser.add_argument("--include-sequences", type=str, nargs="+", default=None,
+                        help="비교할 시퀀스 glob 패턴 (예: video01 video0*)")
+    parser.add_argument("--exclude-sequences", type=str, nargs="+", default=None)
     args = parser.parse_args()
 
     project_root = Path(__file__).resolve().parent.parent
@@ -83,14 +71,14 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    data_cfg = cfg["data"]
-    dataset = UAVSegmentationDataset(
-        images_dir=str(project_root / data_cfg["images_root"] / args.split),
-        masks_dir=str(project_root / data_cfg["masks_root"] / args.split),
-        img_size=tuple(data_cfg["img_size"]),
-        stride=args.eval_stride,
+    dataset = build_split_dataset(
+        cfg["data"], args.split, project_root,
+        overrides={
+            "stride": args.eval_stride,
+            "include_sequences": args.include_sequences,
+            "exclude_sequences": args.exclude_sequences,
+        },
     )
-    print(f"Pool size: {len(dataset):,}")
 
     model_a = load_model(project_root / args.ckpt_a, device, cfg["model"])
     model_b = load_model(project_root / args.ckpt_b, device, cfg["model"])

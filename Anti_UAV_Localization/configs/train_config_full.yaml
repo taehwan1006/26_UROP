@@ -7,6 +7,10 @@
 #   ImageNet Normalize, shuffle=True, N-fold 효율 conv, N=3
 
 # Data
+#
+# 아래는 단일 데이터셋용 기본 형태(images_root + split 폴더명).
+# 데이터셋을 여러 개 합치거나 특정 시퀀스만 쓰려면 `data.sources` 스키마를 사용한다.
+# 예시는 configs/train_config_full_dut.yaml 참고.
 data:
   images_root: "data/raw/images"
   masks_root: "data/raw/masks"

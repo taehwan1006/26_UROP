@@ -11,24 +11,15 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-import yaml
+from torch.utils.data import Dataset
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from dataset.uav_dataset import UAVSegmentationDataset
-from models.thin_dy_unet import ThinDyUNet
-
-
-def load_config(path: str) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-def denorm(image: torch.Tensor) -> np.ndarray:
-    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-    std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-    image = (image.cpu().float() * std + mean).clamp(0, 1)
-    return image.permute(1, 2, 0).numpy()
+from dataset.builder import build_split_dataset
+from models import build_model
+from utils.checkpoint import load_weights
+from utils.config import load_config
+from utils.image import denorm
 
 
 def overlay(img: np.ndarray, mask: np.ndarray, color=(1.0, 0.2, 0.2), alpha=0.5) -> np.ndarray:
@@ -40,7 +31,7 @@ def overlay(img: np.ndarray, mask: np.ndarray, color=(1.0, 0.2, 0.2), alpha=0.5)
     return out
 
 
-def find_uav_indices(dataset: UAVSegmentationDataset, n: int, seed: int = 0) -> list:
+def find_uav_indices(dataset: Dataset, n: int, seed: int = 0) -> list:
     """UAV가 실제로 있는 프레임 위주로 샘플 인덱스 선택."""
     rng = random.Random(seed)
     n_total = len(dataset)
@@ -69,6 +60,9 @@ def main():
         "--eval_stride", type=int, default=200,
         help="시각화용 데이터 검색을 위한 stride (큰 값으로 빠르게)",
     )
+    parser.add_argument("--include-sequences", type=str, nargs="+", default=None,
+                        help="시각화할 시퀀스 glob 패턴 (예: video01 video0*)")
+    parser.add_argument("--exclude-sequences", type=str, nargs="+", default=None)
     args = parser.parse_args()
 
     project_root = Path(__file__).resolve().parent.parent
@@ -77,29 +71,21 @@ def main():
     print(f"Device: {device}")
 
     # Dataset (시각화 후보군만 빠르게 모으기 위해 stride 큰 값)
-    data_cfg = cfg["data"]
-    dataset = UAVSegmentationDataset(
-        images_dir=str(project_root / data_cfg["images_root"] / args.split),
-        masks_dir=str(project_root / data_cfg["masks_root"] / args.split),
-        img_size=tuple(data_cfg["img_size"]),
-        stride=args.eval_stride,
+    dataset = build_split_dataset(
+        cfg["data"], args.split, project_root,
+        overrides={
+            "stride": args.eval_stride,
+            "include_sequences": args.include_sequences,
+            "exclude_sequences": args.exclude_sequences,
+        },
     )
-    print(f"Visualization candidate pool: {len(dataset):,} (stride={args.eval_stride})")
 
     # Model
-    model_cfg = cfg["model"]
-    model = ThinDyUNet(
-        in_channels=model_cfg["in_channels"],
-        n_classes=model_cfg["n_classes"],
-        base_ch=model_cfg["base_ch"],
-        n_kernels=model_cfg["n_kernels"],
-    ).to(device)
-
+    model = build_model(cfg["model"]).to(device)
     ckpt_path = project_root / args.checkpoint
-    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
-    model.load_state_dict(ckpt["model_state_dict"])
+    ckpt = load_weights(model, ckpt_path, device)
     model.eval()
-    print(f"Loaded: {ckpt_path} (epoch {ckpt['epoch']})")
+    print(f"Loaded: {ckpt_path} (epoch {ckpt.get('epoch', '?')})")
 
     # 샘플 선택
     indices = find_uav_indices(dataset, args.n_samples, seed=args.seed)

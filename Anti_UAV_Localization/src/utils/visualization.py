@@ -8,6 +8,8 @@ import torch
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from .image import IMAGENET_MEAN, IMAGENET_STD
+
 
 def save_prediction_comparison(
     image: torch.Tensor,
@@ -35,8 +37,8 @@ def save_prediction_comparison(
 
     # 2. 이미지 정규화 역변환 및 Numpy 변환 (0~255)
     if denormalize:
-        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        mean = torch.tensor(IMAGENET_MEAN).view(3, 1, 1)
+        std = torch.tensor(IMAGENET_STD).view(3, 1, 1)
         image = image * std + mean
         
     img_np = (image.clamp(0, 1).permute(1, 2, 0).numpy() * 255).astype(np.uint8)
