@@ -49,6 +49,12 @@ desktop.ini
 # Jupyter
 .ipynb_checkpoints/
 
+# Synology NAS 썸네일 캐시
+@eaDir/
+
+# 실험 결과 산출물 (미추적)
+Anti_UAV_Localization/results/test_dut/
+
 # SAM 2 모델 가중치
 sam2.1_hiera_large.pt
 sam2.1_hiera_l.pt
