@@ -255,27 +255,34 @@ Anti_UAV_Localization/
 │   ├── extract_data.py         # tar.gz → data/raw/
 │   ├── visualize_only.py       # 예측 그리드 시각화
 │   └── visualize_compare.py    # 두 모델 예측 비교
-└── src/
-    ├── dataset/
-    │   ├── uav_dataset.py      # 이미지/마스크 로딩 + 시퀀스 필터
-    │   └── builder.py          # config sources → (Concat)Dataset
-    ├── models/
-    │   ├── __init__.py         # build_model — model.name으로 선택
-    │   ├── thin_dy_unet.py     # ThinDyUNet (1.37M, dynamic conv)
-    │   └── thin_unet.py        # ablation: regular conv (14.78M)
-    ├── utils/
-    │   ├── losses.py           # DiceLoss / BCEDiceLoss / build_loss
-    │   ├── metrics.py          # IoU 다중 정의
-    │   ├── checkpoint.py       # 저장 / 가중치 로드 / resume
-    │   ├── config.py           # YAML 로딩
-    │   ├── image.py            # ImageNet 정규화 상수 + denorm
-    │   └── visualization.py    # 논문용 오버레이 Figure
-    ├── engine.py               # 학습/검증 루프 (AMP·accumulation)
-    ├── train_full.py           # V2 메인 학습 (--resume / --finetune)
-    ├── evaluate.py             # 테스트셋 평가/시각화
-    ├── evaluate-paper.py       # 논문 공식 메트릭 정의 재현
-    ├── train.py                # V1 baseline (원고 수치 재현용, 보존)
-    └── train_amp.py            # V1 AMP 버전 (원고 수치 재현용, 보존)
+├── src/
+│   ├── dataset/
+│   │   ├── uav_dataset.py      # 이미지/마스크 로딩 + 시퀀스 필터
+│   │   └── builder.py          # config sources → (Concat)Dataset
+│   ├── models/
+│   │   ├── __init__.py         # build_model — model.name으로 선택
+│   │   ├── thin_dy_unet.py     # ThinDyUNet (1.37M, dynamic conv)
+│   │   └── thin_unet.py        # ablation: regular conv (14.78M)
+│   ├── utils/
+│   │   ├── losses.py           # DiceLoss / BCEDiceLoss / build_loss
+│   │   ├── metrics.py          # IoU 다중 정의
+│   │   ├── checkpoint.py       # 저장 / 가중치 로드 / resume
+│   │   ├── config.py           # YAML 로딩
+│   │   ├── image.py            # ImageNet 정규화 상수 + denorm
+│   │   └── visualization.py    # 논문용 오버레이 Figure
+│   ├── engine.py               # 학습/검증 루프 (AMP·accumulation)
+│   ├── train_full.py           # V2 메인 학습 (--resume / --finetune)
+│   ├── evaluate.py             # 테스트셋 평가/시각화
+│   ├── evaluate-paper.py       # 논문 공식 메트릭 정의 재현
+│   ├── train.py                # V1 baseline (원고 수치 재현용, 보존)
+│   └── train_amp.py            # V1 AMP 버전 (원고 수치 재현용, 보존)
+└── results/                     # 평가/시각화 산출물 (evaluate.py --visualize 로 생성)
+    ├── vis_test/                # V1 baseline 예측 시각화
+    ├── vis_test_stride10/       # V1 stride=10 예측 시각화
+    ├── vis_test_dut/            # V2 DUT-Anti-UAV 예측 시각화 (논문용 오버레이)
+    ├── vis_grid_stride10.png    # stride=10 예측 그리드
+    ├── vis_grid_stride20.png    # stride=20 예측 그리드
+    └── vis_compare_s20_vs_s10.png  # stride 10 vs 20 비교
 ```
 
 ---
