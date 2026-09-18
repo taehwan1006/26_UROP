@@ -165,7 +165,11 @@ def main():
     effective_batch = train_cfg["batch_size"] * accum_steps
 
     csv_path = save_dir / "train_log.csv"
-    if not args.resume or not csv_path.exists():
+    # --resume/--finetune 둘 다 "이어서 학습"이므로 기존 로그를 보존한다.
+    # 순수 신규 학습(둘 다 없음)일 때만 새로 쓴다 — 단, 예전 결과를 실수로
+    # 지우지 않도록 존재 여부와 무관하게 새로 쓰는 건 신규 학습일 때뿐이다.
+    is_continuation = bool(args.resume or args.finetune)
+    if not is_continuation or not csv_path.exists():
         with open(csv_path, "w", newline="") as f:
             csv.writer(f).writerow(CSV_HEADER)
 

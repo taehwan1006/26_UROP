@@ -83,6 +83,9 @@ training:
   amp_enabled: True
 
   # I/O
-  save_dir: "checkpoints/full"
+  # 주의: train_config_full.yaml과 save_dir를 반드시 분리할 것.
+  # 같은 경로를 쓰면 --finetune 로 읽어들이는 pretrained 체크포인트를
+  # 파인튜닝 결과가 그대로 덮어써서 원본을 복구할 수 없게 된다 (2026-08-31 발생 사례).
+  save_dir: "checkpoints/full_dut"
   log_interval: 500          # full data는 iteration이 많아서 띄엄띄엄
   ckpt_every_epochs: 5       # 매 5 epoch마다 epoch_NN.pth 저장 (롤백용)
