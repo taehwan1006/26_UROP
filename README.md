@@ -287,6 +287,91 @@ Anti_UAV_Localization/
 
 ---
 
+## V3 (진행 중): 세그멘테이션 + 시계열 추적 통합
+
+2026년도 2학기 UROP 후속 연구. V2 세그멘테이션 파이프라인은 **고정**하고, 그 뒤에 단일 표적 트래커를 붙여
+연결성분 단위로 드론을 선택·추적하고 **최종 출력은 마스크로 유지**한다.
+
+### 핵심 결과 [본 연구 test_dut 실측, best_dut_v3 고정, FP32, threshold 0.5, 픽셀 micro]
+
+| 마스크 | Recall | Precision | UAV IoU | Dice | 드론 부재 프레임 오탐 |
+| --- | --- | --- | --- | --- | --- |
+| V2 원본 (필터링 없음) | 0.7671 | 0.7280 | 0.5962 | 0.7471 | 1,333 / 2,586 |
+| **V2 + 트래킹 (최고 설정)** | 0.7513 | **0.8316** | **0.6521** | **0.7894** | **1,044 / 2,586** |
+
+**UAV IoU +5.6%p, Precision +10.4%p, Dice +4.2%p, Recall −1.6%p.** 오탐 픽셀 −46.9%, 정답 픽셀 −2.1%.
+추가 후처리 비용은 CPU 2.19 ms/frame.
+
+> V2 원본 행은 선행 논문 표(76.71 / 72.80 / 59.62, F1 0.7471)와 소수점까지 일치한다.
+> `evaluate.py` 직접 실행 결과와도 전 자리 일치 — 새 픽셀 지표 구현이 기존 `SegmentationMetrics` 정의를 그대로 재현함을 확인.
+
+### 최고 설정
+
+```bash
+python Anti_UAV_Localization/src/track_eval.py \
+    --config Anti_UAV_Localization/configs/train_config_full_dut.yaml \
+    --checkpoint checkpoints/best_dut_v3/best_model.pth \
+    --mode kalman --mask-mode expand --coast-output mask \
+    --score-mode mean --init-thresh 0.9 \
+    --gate-dims 4 --gate-chi2 13.28 \
+    --run-name kf_best
+```
+
+첫 실행은 전체 프레임을 추론해 확률맵을 희소 캐시(test_dut 전체 약 11MB)로 저장하고, 이후 실행은 캐시를 재사용하므로
+트래커 설정만 바꿔 빠르게 반복 실험할 수 있다. GT 마스크도 희소 캐시로 한 번만 읽는다.
+
+### 요인별 기여 (ablation)
+
+| 요인 | UAV IoU 기여 | 설명 |
+| --- | --- | --- |
+| 성분 1개만 남기기 (per_frame) | +0.030 | 시간 정보 없이 최고 점수 성분만 출력 |
+| Kalman + coast 정책(`--coast-output mask`) | +0.009 | 가림 구간에서 예측 위치 근처 성분을 되살림 |
+| 마스크 확장(`--mask-mode expand`) | +0.004 | 쪼개진 드론 마스크 회복. **추적이 있을 때만 이득** (per_frame에서는 −0.006) |
+| 성분 점수 mean + `--init-thresh 0.9` | +0.009 | max 확률은 성분이 10px만 넘어도 포화되어 판별 불가 |
+| 게이트 4차원(중심+크기) | +0.008 | **mean 점수와 함께일 때만 작동** (max와 조합 시 −0.002) |
+| **합계** | **+0.056** | |
+
+### 평가 체계
+
+- **주 지표: 픽셀** Recall / Precision / UAV IoU — 선행 논문과 같은 정의(SAM 2.1 마스크 GT, 512×512, micro 누적)이므로 V2 수치와 직접 비교 가능
+- **참고 지표: 박스 SOT** Success AUC / Precision@20px / Normalized Precision / State Accuracy
+  - DUT GT 박스는 마스크보다 느슨해서 픽셀 단위로 정확한 예측이 오히려 감점된다 → 박스 지표는 박스 기반 추적 연구와 비교할 때만 사용
+  - 첫 프레임 GT 초기화를 쓰지 않고 GT 존재 프레임만 평가하므로 타 논문 SOT 수치와 직접 비교 불가
+- 트래커가 만든 마스크는 `track`, 필터링 없는 V2 마스크는 `all`로 매 실행마다 함께 출력
+
+### 알려진 실패 사례: video04 (낙하산)
+
+낙하산에 매달려 낙하하는 드론 영상. 세그멘테이션이 낙하산까지 드론으로 분할하고(원본 마스크 IoU 0.324),
+낙하산은 드론과 **궤적이 동일**해 모션 기반 게이트로 분리할 수 없다. 재초기화 규칙 변경으로는 개선되지 않았고,
+mean 점수 + 4차원 게이트 조합에서 0.154 → 0.260으로 부분 회복에 그쳤다.
+근본 해결은 낙하산을 hard negative로 포함한 재학습(v3 모델 단계).
+
+### 추가된 코드
+
+```
+Anti_UAV_Localization/
+├── checkpoints/frozen/          # V2 고정 기준선 보존 (해시 기록)
+└── src/
+    ├── track_eval.py            # 통합 평가 진입점 (픽셀 + 박스 지표)
+    └── tracking/
+        ├── detections.py        # 확률맵 → 연결성분 후보 (박스·점수·픽셀 인덱스)
+        ├── kalman.py            # 등속 KF [cx, cy, w, h] + 게이팅 거리
+        ├── tracker.py           # 단일 표적 트래커 (per_frame / kalman)
+        ├── pixel_metrics.py     # SegmentationMetrics와 동일 정의 + GT 마스크 캐시
+        ├── prob_cache.py        # 확률맵 희소 캐시
+        └── sot_metrics.py       # Success / Precision / Norm.Precision / State Accuracy
+```
+
+기존 학습·평가 코드는 수정하지 않았다.
+
+### 남은 과제
+
+1. **새 test셋 구축** — 현재 설정은 test_dut 수치를 보며 선택했으므로, 확정하려면 한 번도 쓰지 않은 테스트셋이 필요하다. Anti-UAV300 RGB의 test 분할에서 20~30 시퀀스를 골라 SAM 2 비디오 전파로 마스크를 만들고 일부를 사람이 검수하는 방안을 검토 중
+2. 낙하산 등 hard negative 학습 (v3 모델)
+3. 통합 파이프라인 종단간 속도 재측정 → ONNX/TensorRT 변환 및 FP16·INT8 양자화
+
+---
+
 ## References
 
 * Kim, S.; Jang, K. *A Semantic Segmentation Dataset and Real-Time Localization Model for Anti-UAV Applications.* Applied Sciences 2025, 15, 7183.
