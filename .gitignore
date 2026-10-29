@@ -3,7 +3,6 @@
 *.tar
 **/data/
 Anti_UAV_Localization/data/
-**/data/
 DUT-Anti-UAV/
 
 # 논문 PDF 및 원고 (저작권 / 학회 제출본)
@@ -21,8 +20,26 @@ Anti_UAV_Localization/checkpoints/
 # 학습/평가 로그 (tqdm carriage return으로 비대)
 *.log
 
-# 메모리 디렉토리
-.claude/
+# Claude Code — 공유 설정(.claude/settings.json, .claude/rules/)은 커밋하고 PC별 설정만 제외
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+
+# 비공개 연구 노트 (별도 private 저장소를 이 위치에 clone)
+notes/
+
+# 외부 저장소 (별도 git 저장소)
+uav/
+
+# 트래킹 확률맵·GT 마스크 캐시 — PC마다 따로 생성 (체크포인트·GPU에 따라 내용이 달라짐)
+Anti_UAV_Localization/results/tracking/_cache/
+
+# 분석 스크립트의 대용량 출력물
+Anti_UAV_Localization/*.csv
+Anti_UAV_Localization/*.png
+Anti_UAV_Localization/*_result*.txt
+Anti_UAV_Localization/tar_list.txt
+Anti_UAV_Localization/viz_stage_maps/
 
 # Python
 __pycache__/
@@ -46,7 +63,7 @@ ENV/
 Thumbs.db
 desktop.ini
 
-# Jupyter
+# Jupyter (노트북 출력은 nbstripout으로 커밋 전에 제거)
 .ipynb_checkpoints/
 
 # Synology NAS 썸네일 캐시

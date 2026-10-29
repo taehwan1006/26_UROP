@@ -1,0 +1,24 @@
+# 텍스트 파일은 저장소에 LF로 저장하고 작업 폴더에서도 LF로 꺼낸다 (Windows ↔ Ubuntu 줄바꿈 혼선 방지)
+* text=auto eol=lf
+
+# Windows 전용 스크립트
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 바이너리
+*.pth binary
+*.pt binary
+*.onnx binary
+*.engine binary
+*.npz binary
+*.npy binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.mp4 binary
+*.pdf binary
+*.docx binary
+*.zip binary
+*.gz binary
+*.tar binary
